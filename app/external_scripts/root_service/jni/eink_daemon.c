@@ -1,7 +1,9 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -12,338 +14,287 @@
 #include <sys/xattr.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include "pretty.h"
 
-static const char* kTAG = "a9EinkService";
-#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, kTAG, __VA_ARGS__))
-#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, kTAG, __VA_ARGS__))
+static readonly string kTAG = "hibreakEinkService";
+// #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, kTAG, __VA_ARGS__))
+// #define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, kTAG, __VA_ARGS__))
 
-#define SOCKET_NAME "0a9_eink_socket"
+#define LOGI(...) ((void)printf(__VA_ARGS__))
+#define LOGE(...) ((void)printf(__VA_ARGS__))
+
+#define SOCKET_NAME "hibreak_eink_socket"
 #define BUFFER_SIZE 512
 
-static const char* theme_styles[] = {
-        "TONAL_SPOT",
-        "VIBRANT",
-        "RAINBOW",
-        "EXPRESSIVE",
-        "FRUIT_SALAD",
-        "SPRITZ"
-};
-
-int valid_number(const char *s) {
-    if(strlen(s) > 4 || strlen(s) == 0)
+int valid_number(readonly string s) {
+    let ss = s;
+    if((s is NULL) or (strlen(s) > 4) or (strlen(s) == 0))
         return 0;
 
-    while (*s)
-        if (isdigit(*s++) == 0) return 0;
+    while (*ss)
+        if (isdigit(*ss++) == 0) return 0;
 
     return 1;
 }
 
-int valid_hex_color(const char *s) {
-    if (strlen(s) != 6)
-        return 0;
+void write_device(readonly string p, bytes b, uint sz) {
+    with (fd, close, open(p, O_WRONLY)) {
+        if (fd == -1) {
+            LOGE("Error opening %s: %s\n", p, strerror(errno));
+            break;
+        }
+        if (write(fd, b, sz) == -1) {
+            LOGE("Error writing to %s: %s\n", p, strerror(errno));
+        }
 
-    while (*s)
-        if (!isxdigit(*s++)) return 0;
-
-    return 1;
-}
-
-void sanitize_input(int theme_style_index, const char* hex_color, char* sanitized_theme_style, char* sanitized_hex_color) {
-    if (theme_style_index < 0 || theme_style_index > 5) {
-        theme_style_index = 5; // Default to monotone
-    }
-    strcpy(sanitized_theme_style, theme_styles[theme_style_index]);
-
-    if (!valid_hex_color(hex_color)) {
-        strcpy(sanitized_hex_color, "333333");
-    } else {
-        strcpy(sanitized_hex_color, hex_color);
     }
 }
 
-void generate_json_string(char* json_str, const char* theme_style, const char* hex_color) {
-    sprintf(json_str, "{\"android.theme.customization.theme_style\":\"%s\",\"android.theme.customization.color_source\":\"preset\",\"android.theme.customization.system_palette\":\"%s\"}", theme_style, hex_color);
+void ioctl_device(readonly string p, int op, bytes v) {
+    with (fd, close, open(p, O_WRONLY)) {
+        if (fd == -1) {
+            LOGE("Error opening %s: %s\n", p, strerror(errno));
+            break;
+        }
+        if (ioctl(fd, op, v) == -1) {
+            LOGE("Error ioctl to %s: %s\n", p, strerror(errno));
+        }
+
+    }
 }
 
-void execute_settings_command(const char* json_str) {
+void set_prop(readonly string setting, readonly string v) {
     pid_t pid = fork();
     if (pid == 0) {
-        execl("/system/bin/settings", "settings", "put", "secure", "theme_customization_overlay_packages", json_str, (char *)NULL);
-        LOGE("execlp failed: %s", strerror(errno));
+        execl("/system/bin/setprop", "setprop", setting, v, (char *)NULL);
+        LOGE("execlp failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     } else if (pid < 0) {
-        LOGE("fork failed: %s", strerror(errno));
+        LOGE("fork failed: %s\n", strerror(errno));
     } else {
         wait(NULL);
     }
-}
-
-void applyThemeCustomization(int theme_style_index, const char* hex_color) {
-    char sanitized_theme_style[20];
-    char sanitized_hex_color[7];
-    char json_str[BUFFER_SIZE];
-
-    sanitize_input(theme_style_index, hex_color, sanitized_theme_style, sanitized_hex_color);
-    generate_json_string(json_str, sanitized_theme_style, sanitized_hex_color);
-    execute_settings_command(json_str);
 }
 
 void epdForceClear() {
-    const char* filePath = "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_force_clear";
-    int fd = open(filePath, O_WRONLY);
-    if (fd == -1) {
-        LOGE("Error writing to %s: %s\n", filePath, strerror(errno));
-        return;
-    }
-    if (write(fd, "1", 1) == -1) {
-        LOGE("Error writing to %s: %s\n", filePath, strerror(errno));
-    }
-    close(fd);
+    write_device(
+        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_force_clear",
+        "1",
+        1
+    );
 }
 
 void epdCommitBitmap() {
-    const char* filePath = "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_commit_bitmap";
-    int fd = open(filePath, O_WRONLY);
-    if (fd == -1) {
-        LOGE("Error writing to %s: %s\n", filePath, strerror(errno));
-        return;
-    }
-    if (write(fd, "1", 1) == -1) {
-        LOGE("Error writing to %s: %s\n", filePath, strerror(errno));
-    }
-    close(fd);
+    write_device(
+        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_commit_bitmap",
+        "1",
+        1
+    );
 }
 
-void writeToEpdDisplayMode(const char* value) {
-    const char* filePath = "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_display_mode";
-    if(!valid_number(value)){
-        LOGE("Error writing to %s: Invalid Number\n", filePath);
+void writeToEpdDisplayMode(readonly string v) {
+    if(!valid_number(v)){
+        LOGE("Error invalid number %s\n", v);
         return;
     }
-
-    int fd = open(filePath, O_WRONLY);
-    if (fd == -1) {
-        LOGE("Error writing to %s: %s\n", filePath, strerror(errno));
-        return;
-    }
-    if (write(fd, value, strlen(value)) == -1) {
-        LOGE("Error writing to %s: %s\n", filePath, strerror(errno));
-    }
-    close(fd);
+    write_device(
+        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_display_mode",
+        v,
+        strlen(v)
+    );
 }
 
-void setWhiteThreshold(const char* brightness) {
-    const char* whiteThresholdPath ="/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_white_threshold";
+void set_backlight_brighness(readonly string v) {
+    if(!valid_number(v)){
+        LOGE("Error invalid number %s\n", v);
+        return;
+    }
+    ubyte b = clamp(0, atoi(v), 255);
+    ioctl_device("/dev/lm3630a", 0x7901, (bytes)&b);
+}
+
+void setWhiteThreshold(readonly string brightness) {
     if(!valid_number(brightness)){
-        LOGE("Error writing to %s: Invalid Number\n", whiteThresholdPath);
+        LOGE("Error invalid number %s\n", brightness);
         return;
     }
-    int fd = open(whiteThresholdPath, O_WRONLY);
-    if (fd == -1) {
-        LOGE("Error writing to %s: %s\n", whiteThresholdPath, strerror(errno));
-        return;
-    }
-    if (write(fd, brightness, strlen(brightness)) == -1) {
-        LOGE("Error writing to %s: %s\n", whiteThresholdPath, strerror(errno));
-    }
-    close(fd);
+    write_device(
+        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_white_threshold",
+        brightness,
+        strlen(brightness)
+    );
 }
 
-void setBlackThreshold(const char* brightness) {
-    const char* blackThresholdPath = "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_black_threshold";
+void setBlackThreshold(readonly string brightness) {
     if(!valid_number(brightness)){
-        LOGE("Error writing to %s: Invalid Number\n", blackThresholdPath);
+        LOGE("Error invalid number %s\n", brightness);
         return;
     }
-    int fd = open(blackThresholdPath, O_WRONLY);
-    if (fd == -1) {
-        LOGE("Error writing to %s: %s\n", blackThresholdPath, strerror(errno));
-        return;
-    }
-    if (write(fd, brightness, strlen(brightness)) == -1) {
-        LOGE("Error writing to %s: %s\n", blackThresholdPath, strerror(errno));
-    }
-    close(fd);
+    write_device(
+        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_black_threshold",
+        brightness,
+        strlen(brightness)
+    );
 }
 
-void setContrast(const char* brightness) {
-    const char* contrastPath = "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_contrast";
+void setContrast(readonly string brightness) {
     if(!valid_number(brightness)){
-        LOGE("Error writing to %s: Invalid Number\n", contrastPath);
+        LOGE("Error invalid number %s\n", brightness);
         return;
     }
-    int fd = open(contrastPath, O_WRONLY);
-    if (fd == -1) {
-        LOGE("Error writing to %s: %s\n", contrastPath, strerror(errno));
-        return;
-    }
-    if (write(fd, brightness, strlen(brightness)) == -1) {
-        LOGE("Error writing to %s: %s\n", contrastPath, strerror(errno));
-    }
-    close(fd);
+    write_device(
+        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_contrast",
+        brightness,
+        strlen(brightness)
+    );
 }
 
-void writeLockscreenProp(const char* value) {
+void writeLockscreenProp(readonly string value) {
     if(!valid_number(value)){
-        LOGE("Error setting static lockscreen: Invalid Number\n");
+        LOGE("Error invalid number %s\n", value);
         return;
     }
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl("/system/bin/setprop", "setprop", "sys.linevibrator_type", value, (char *)NULL);
-        LOGE("execlp failed: %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    } else if (pid < 0) {
-        LOGE("fork failed: %s", strerror(errno));
-    } else {
-        wait(NULL);
-    }
+    set_prop("sys.linevibrator_type", value);
 }
 
-void writeMaxBrightnessProp(const char* value) {
+void writeMaxBrightnessProp(readonly string value) {
     if(!valid_number(value)){
-        LOGE("Error setting static lockscreen: Invalid Number\n");
+        LOGE("Error invalid number %s\n", value);
         return;
     }
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl("/system/bin/setprop", "setprop", "sys.linevibrator_touch", value, (char *)NULL);
-        LOGE("execlp failed: %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    } else if (pid < 0) {
-        LOGE("fork failed: %s", strerror(errno));
-    } else {
-        wait(NULL);
-    }
+    set_prop("sys.linevibrator_touch", value);
 }
 
-void writeWakeOnVolumeProp(const char* value) {
+void writeWakeOnVolumeProp(readonly string value) {
     if(!valid_number(value)){
-        LOGE("Error setting static lockscreen: Invalid Number\n");
+        LOGE("Error invalid number %s\n", value);
         return;
     }
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl("/system/bin/setprop", "setprop", "sys.wakeup_on_volume", value, (char *)NULL);
-        LOGE("execlp failed: %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    } else if (pid < 0) {
-        LOGE("fork failed: %s", strerror(errno));
-    } else {
-        wait(NULL);
-    }
+    set_prop("sys.wakeup_on_volume", value);
 }
 
-void processCommand(const char* command) {
-    if (strcmp(command, "cm") == 0) {
-        epdCommitBitmap();
-    } else if (strcmp(command, "r") == 0) {
-        epdForceClear();
-    } else if (strcmp(command, "c") == 0) {
-        writeToEpdDisplayMode("515");
-    } else if (strcmp(command, "b") == 0) {
-        writeToEpdDisplayMode("513");
-    } else if (strcmp(command, "s") == 0) {
-        writeToEpdDisplayMode("518");
-    } else if (strcmp(command, "p") == 0) {
-        writeToEpdDisplayMode("521");
-    } else if (strncmp(command, "stw", 3) == 0) {
-        if(valid_number(command+3))
-            setWhiteThreshold(command+3);
-    } else if (strncmp(command, "stl", 3) == 0) {
-        if(valid_number(command+3))
-            writeLockscreenProp(command+3);
-    } else if (strncmp(command, "stb", 3) == 0) {
-        if(valid_number(command+3))
-            setBlackThreshold(command+3);
-    } else if (strncmp(command, "sco", 3) == 0) {
-        if(valid_number(command+3))
-            setContrast(command+3);
-    } else if (strncmp(command, "smb", 3) == 0) {
-        if(valid_number(command+3))
-            writeMaxBrightnessProp(command+3);
-    } else if (strncmp(command, "wov", 3) == 0) {
-        if(valid_number(command+3))
-            writeWakeOnVolumeProp(command+3);
-    } else if (strncmp(command, "theme", 5) == 0) {
-        int theme_style_index;
-        char hex_color[7];
-        if (sscanf(command + 5, "%d %6s", &theme_style_index, hex_color) == 2) {
-            applyThemeCustomization(theme_style_index, hex_color);
-        } else {
-            LOGE("Invalid theme command format");
-        }
-    } else {
-        LOGE("Unknown command: %s", command);
-    }
+void epd_515() {
+    writeToEpdDisplayMode("515");
+}
+void epd_513() {
+    writeToEpdDisplayMode("513");
+}
+void epd_518() {
+    writeToEpdDisplayMode("518");
+}
+void epd_521() {
+    writeToEpdDisplayMode("521");
 }
 
-_Noreturn void setupServer() {
-    int server_sockfd, client_sockfd;
-    struct sockaddr_un server_addr;
-    char buffer[BUFFER_SIZE];
-    socklen_t socket_length = sizeof(server_addr.sun_family) + strlen(SOCKET_NAME);
+typedef struct {
+    const char *command;
+    void (*func)(readonly string arg);
+    bool requires_arg;
+} Command;
 
-    server_sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (server_sockfd < 0) {
-        LOGE("Socket creation failed: %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+Command commands[] = {
+    {"stw", setWhiteThreshold, true},
+    {"stl", writeLockscreenProp, true},
+    {"stb", setBlackThreshold, true},
+    {"sco", setContrast, true},
+    {"smb", writeMaxBrightnessProp, true},
+    {"wov", writeWakeOnVolumeProp, true},
+    {"bl", set_backlight_brighness, true},
+    {"cm", (void(*)(readonly string))epdCommitBitmap, false},
+    {"r", (void(*)(readonly string))epdForceClear, false},
+    {"c", (void(*)(readonly string))epd_515, false},
+    {"b", (void(*)(readonly string))epd_513, false},
+    {"s", (void(*)(readonly string))epd_518, false},
+    {"p", (void(*)(readonly string))epd_521, false},
+};
 
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sun_family = AF_UNIX;
-    strncpy(server_addr.sun_path, SOCKET_NAME, sizeof(server_addr.sun_path) - 1);
-    server_addr.sun_path[0] = 0;
-
-    if (bind(server_sockfd, (struct sockaddr*)&server_addr, socket_length) < 0) {
-        LOGE("Socket bind failed: %s", strerror(errno));
-        close(server_sockfd);
-        exit(EXIT_FAILURE);
-    }
-
-    if (listen(server_sockfd, 50) < 0) {
-        LOGE("Socket listen failed: %s", strerror(errno));
-        close(server_sockfd);
-        exit(EXIT_FAILURE);
-    }
-
-    LOGI("Server started listening.");
-
-    while (1) {
-        client_sockfd = accept(server_sockfd, NULL, NULL);
-        if (client_sockfd < 0) {
-            LOGE("Socket accept failed: %s", strerror(errno));
-            continue;
-        }
-
-        while (1) {
-            memset(buffer, 0, BUFFER_SIZE);
-            ssize_t num_read = read(client_sockfd, buffer, BUFFER_SIZE - 1);
-            if (num_read > 0) {
-                buffer[num_read] = '\0';
-                char* cmd = strtok(buffer, "\n");
-                while (cmd != NULL) {
-                    processCommand(cmd);
-                    cmd = strtok(NULL, "\n");
-                }
-            } else if (num_read == 0) {
-                LOGI("Client disconnected");
-                break;
+void process(readonly string cmdline) {
+    let i = 0;
+    let l = len(commands);
+    for (i = 0; i < l; ++i) {
+        let c = &commands[i];
+        let c_len = strlen(c->command);
+        if (strncmp(c->command, cmdline, c_len) == 0) {
+            if (c->requires_arg) {
+                let arg = cmdline + c_len;
+                while(*arg is ' ') arg++;
+                c->func(arg);
             } else {
-                LOGE("Socket read failed: %s", strerror(errno));
-                break;
+                c->func(NULL);
+            }
+            break;
+        }
+    }
+    if (i >= l) {
+        LOGE("Unknown command: %s\n", cmdline);
+    }
+}
+
+int serve() {
+    struct sockaddr_un server_addr;
+    byte buffer[BUFFER_SIZE];
+    socklen_t socket_length = sizeof(server_addr.sun_family) + strlen(SOCKET_NAME);
+    memset(&server_addr, 0, sizeof(server_addr));
+    strncpy(server_addr.sun_path, SOCKET_NAME, sizeof(server_addr.sun_path) - 1);
+    server_addr.sun_family = AF_UNIX;
+    // server_addr.sun_path[0] = 0;
+
+    int ret = EXIT_SUCCESS;
+    with(serverfd, close, socket(AF_UNIX, SOCK_STREAM, 0)) {
+        if (serverfd < 0) {
+            LOGE("Socket creation failed: %s\n", strerror(errno));
+            ret = EXIT_FAILURE;
+            break;
+        }
+        if (bind(serverfd, (struct sockaddr*)&server_addr, socket_length) < 0) {
+            LOGE("Socket bind failed: %s\n", strerror(errno));
+            ret = EXIT_FAILURE;
+            break;
+        }
+
+        if (listen(serverfd, 50) < 0) {
+            LOGE("Socket listen failed: %s\n", strerror(errno));
+            break;
+            ret = EXIT_FAILURE;
+            break;
+        }
+
+        LOGI("Server started listening.\n");
+
+        loop {
+            with(clientfd, close, accept(serverfd, NULL, NULL)) {
+                if (clientfd < 0) {
+                    LOGE("Socket accept failed: %s\n", strerror(errno));
+                    break;
+                }
+
+                loop {
+                    memset(buffer, 0, BUFFER_SIZE);
+                    let num_read = read(clientfd, buffer, BUFFER_SIZE - 1);
+                    if (num_read > 0) {
+                        buffer[num_read] = '\0';
+                        let cmd = strtok(buffer, "\n");
+                        while (cmd != NULL) {
+                            process(cmd);
+                            cmd = strtok(NULL, "\n");
+                        }
+                    } else if (num_read == 0) {
+                        LOGI("Client disconnected\n");
+                        break;
+                    } else {
+                        LOGE("Socket read failed: %s\n", strerror(errno));
+                        break;
+                    }
+                }
+
             }
         }
-
-        close(client_sockfd);
     }
-
-    close(server_sockfd);
+    return ret;
 }
 
 int main(void) {
     signal(SIGHUP, SIG_IGN);
-    setupServer();
-    return 0;
+    LOGI("Starting\n");
+    return serve();
 }
