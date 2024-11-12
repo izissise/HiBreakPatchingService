@@ -111,6 +111,7 @@ void set_backlight_brighness(readonly string v) {
     }
     ubyte b = clamp(0, atoi(v), 255);
     ioctl_device("/dev/lm3630a", 0x7901, (bytes)&b);
+    ioctl_device("/dev/lm3630a", 0x7902, (bytes)&b);
 }
 
 void setWhiteThreshold(readonly string brightness) {
@@ -209,7 +210,7 @@ Command commands[] = {
 };
 
 void process(readonly string cmdline) {
-    let i = 0;
+    ulong i = 0;
     let l = len(commands);
     for (i = 0; i < l; ++i) {
         let c = &commands[i];
