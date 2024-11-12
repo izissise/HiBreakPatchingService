@@ -17,11 +17,11 @@
 #include "pretty.h"
 
 static readonly string kTAG = "hibreakEinkService";
-// #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, kTAG, __VA_ARGS__))
-// #define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, kTAG, __VA_ARGS__))
+#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, kTAG, __VA_ARGS__))
+#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, kTAG, __VA_ARGS__))
 
-#define LOGI(...) ((void)printf(__VA_ARGS__))
-#define LOGE(...) ((void)printf(__VA_ARGS__))
+// #define LOGI(...) ((void)printf(__VA_ARGS__))
+// #define LOGE(...) ((void)printf(__VA_ARGS__))
 
 #define SOCKET_NAME "hibreak_eink_socket"
 #define BUFFER_SIZE 512
@@ -76,33 +76,6 @@ void set_prop(readonly string setting, readonly string v) {
     }
 }
 
-void epdForceClear() {
-    write_device(
-        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_force_clear",
-        "1",
-        1
-    );
-}
-
-void epdCommitBitmap() {
-    write_device(
-        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_commit_bitmap",
-        "1",
-        1
-    );
-}
-
-void writeToEpdDisplayMode(readonly string v) {
-    if(!valid_number(v)){
-        LOGE("Error invalid number %s\n", v);
-        return;
-    }
-    write_device(
-        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_display_mode",
-        v,
-        strlen(v)
-    );
-}
 
 void set_backlight_brighness(readonly string v) {
     if(!valid_number(v)){
@@ -112,79 +85,32 @@ void set_backlight_brighness(readonly string v) {
     ubyte b = clamp(0, atoi(v), 255);
     ioctl_device("/dev/lm3630a", 0x7901, (bytes)&b);
     ioctl_device("/dev/lm3630a", 0x7902, (bytes)&b);
+    LOGI("Brightness set to %d\n", b);
 }
 
-void setWhiteThreshold(readonly string brightness) {
-    if(!valid_number(brightness)){
-        LOGE("Error invalid number %s\n", brightness);
-        return;
+
+void set_auto_clean(readonly string v) {
+    let enable = false;
+    if (!v && in(v, string, "1", "true", "yes")) {
+        enable = true;
     }
-    write_device(
-        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_white_threshold",
-        brightness,
-        strlen(brightness)
-    );
+    uint b [2];
+    b[1] = 0;
+    b[0] = enable ? 0x3102 : 0x3002;
+    write_device("/sys/kernel/debug/eink_debug/clean_a2", (char*)&b, sizeof(b));
+    LOGI("Auto Clean set to %d\n", enable);
 }
 
-void setBlackThreshold(readonly string brightness) {
-    if(!valid_number(brightness)){
-        LOGE("Error invalid number %s\n", brightness);
-        return;
+void set_anti_flicker(readonly string v) {
+    let enable = false;
+    if (!v && in(v, string, "1", "true", "yes")) {
+        enable = true;
     }
-    write_device(
-        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_black_threshold",
-        brightness,
-        strlen(brightness)
-    );
-}
-
-void setContrast(readonly string brightness) {
-    if(!valid_number(brightness)){
-        LOGE("Error invalid number %s\n", brightness);
-        return;
-    }
-    write_device(
-        "/sys/devices/platform/soc/soc:qcom,dsi-display-primary/epd_contrast",
-        brightness,
-        strlen(brightness)
-    );
-}
-
-void writeLockscreenProp(readonly string value) {
-    if(!valid_number(value)){
-        LOGE("Error invalid number %s\n", value);
-        return;
-    }
-    set_prop("sys.linevibrator_type", value);
-}
-
-void writeMaxBrightnessProp(readonly string value) {
-    if(!valid_number(value)){
-        LOGE("Error invalid number %s\n", value);
-        return;
-    }
-    set_prop("sys.linevibrator_touch", value);
-}
-
-void writeWakeOnVolumeProp(readonly string value) {
-    if(!valid_number(value)){
-        LOGE("Error invalid number %s\n", value);
-        return;
-    }
-    set_prop("sys.wakeup_on_volume", value);
-}
-
-void epd_515() {
-    writeToEpdDisplayMode("515");
-}
-void epd_513() {
-    writeToEpdDisplayMode("513");
-}
-void epd_518() {
-    writeToEpdDisplayMode("518");
-}
-void epd_521() {
-    writeToEpdDisplayMode("521");
+    uint b [2];
+    b[1] = 0;
+    b[0] = enable ? 0x3102 : 0x3002;
+    write_device("/sys/kernel/debug/eink_debug/anti_flicker", (char*)&b, sizeof(b));
+    LOGI("Anti Flicker set to %d\n", enable);
 }
 
 typedef struct {
@@ -194,19 +120,9 @@ typedef struct {
 } Command;
 
 Command commands[] = {
-    {"stw", setWhiteThreshold, true},
-    {"stl", writeLockscreenProp, true},
-    {"stb", setBlackThreshold, true},
-    {"sco", setContrast, true},
-    {"smb", writeMaxBrightnessProp, true},
-    {"wov", writeWakeOnVolumeProp, true},
     {"bl", set_backlight_brighness, true},
-    {"cm", (void(*)(readonly string))epdCommitBitmap, false},
-    {"r", (void(*)(readonly string))epdForceClear, false},
-    {"c", (void(*)(readonly string))epd_515, false},
-    {"b", (void(*)(readonly string))epd_513, false},
-    {"s", (void(*)(readonly string))epd_518, false},
-    {"p", (void(*)(readonly string))epd_521, false},
+    {"ac", set_auto_clean, true},
+    {"af", set_anti_flicker, true},
 };
 
 void process(readonly string cmdline) {
