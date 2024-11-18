@@ -39,7 +39,7 @@ import net.izissise.hibreak_comp_service.databinding.FloatingMenuLayoutBinding
 import kotlin.math.max
 
 
-class HibreakAccessibilityService : AccessibilityService(),
+class HibreakAccessibilityService: AccessibilityService(),
     SharedPreferences.OnSharedPreferenceChangeListener {
     private lateinit var commandRunner: CommandRunner
     private lateinit var refreshModeManager: RefreshModeManager
@@ -95,6 +95,12 @@ class HibreakAccessibilityService : AccessibilityService(),
             }
         }
     }
+    private val receiverBacklight: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val v = intent.getIntExtra(BacklightSliderPreference.EXTRA_BACKLIGHT_VALUE, 0)
+            commandRunner.runCommands(arrayOf(Commands.BACKLIGHT_BRIGHTNESS(v)))
+        }
+    }
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -117,6 +123,10 @@ class HibreakAccessibilityService : AccessibilityService(),
 
         buttonActionManager = ButtonActionManager(commandRunner)
 
+        val filterBacklight = IntentFilter()
+        filterBacklight.addAction("BACKLIGHT_CHANGED")
+        registerReceiver(receiverBacklight, filterBacklight)
+
         val filterScreen = IntentFilter()
         filterScreen.addAction(Intent.ACTION_SCREEN_ON)
         filterScreen.addAction(Intent.ACTION_SCREEN_OFF)
@@ -134,6 +144,8 @@ class HibreakAccessibilityService : AccessibilityService(),
         staticAODOpacityManager.applyMode()
         staticAODOpacityManager.applyReader()
         updateMaxBrightness(sharedPreferences)
+        updateAutoClear(sharedPreferences)
+        updateAntiFlicker(sharedPreferences)
     }
 
     override fun onInterrupt() {
@@ -407,6 +419,16 @@ class HibreakAccessibilityService : AccessibilityService(),
         commandRunner.runCommands(arrayOf("theme $type $colorString"))
     }
 
+    private fun updateAutoClear(sharedPreferences: SharedPreferences) = sharedPreferences.run {
+        val v = getBoolean("auto_clear", true)
+        commandRunner.runCommands(arrayOf(Commands.AUTO_CLEAR(v)))
+    }
+
+    private fun updateAntiFlicker(sharedPreferences: SharedPreferences) = sharedPreferences.run {
+        val v = getBoolean("auto_flicker", true)
+        commandRunner.runCommands(arrayOf(Commands.ANTI_FLICKER(v)))
+    }
+
     private fun updateMaxBrightness(sharedPreferences: SharedPreferences) = sharedPreferences.run {
         try{
             val brightness = Integer.parseInt(getString("override_max_brightness", "2000")?:"2000")
@@ -439,6 +461,14 @@ class HibreakAccessibilityService : AccessibilityService(),
                 handler.postDelayed({
                     commandRunner.runCommands(arrayOf(Commands.FORCE_CLEAR))
                 }, 700)
+            }
+
+            "auto_clear" -> {
+                sharedPreferences?.let { updateAutoClear(it) }
+            }
+
+            "anti_flicker" -> {
+                sharedPreferences?.let { updateAntiFlicker(it) }
             }
         }
     }

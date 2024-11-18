@@ -2,6 +2,14 @@ Automatically patch system.img for use with Bigem Hibreak, adding eink features 
 
 I use `mingc/android-build-box` to compile the project:
 
+```bash
+mkdir -p build_cache/{jenv,gradle,android-sdk}
+docker volume create --driver local --opt type=none --opt device=$PWD/build_cache/jenv/ --opt o=bind jenv-cache
+docker volume create --driver local --opt type=none --opt device=$PWD/build_cache/android-sdk/ --opt o=bind android-sdk
+docker run --user="$(id -u):$(id -g)" --userns=keep-id --cap-drop=ALL -v android-sdk:/opt/android-sdk/ -v jenv-cache:/root/.jenv/ -v $PWD/build_cache/gradle/:/root/.gradle/ -v $PWD:/work:rw -w /work -ti mingc/android-build-box bash
+./gradlew build
+```
+
 ## Licensing
 
 ### MIT License

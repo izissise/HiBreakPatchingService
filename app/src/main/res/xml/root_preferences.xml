@@ -1,7 +1,24 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <PreferenceCategory app:title="EInk Service Settings">
+    <PreferenceCategory app:title="Backlight Setting">
+        <net.izissise.hibreak_comp_service.BacklightSliderPreference
+            app:key="backlight_slider"
+            app:title="Adjust Backlight"
+            app:defaultValue="0" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="EInk Screen">
+        <SwitchPreferenceCompat
+            app:key="auto_clear"
+            app:title="Auto Clear screen" />
+
+        <SwitchPreferenceCompat
+            app:key="anti_flicker"
+            app:title="Anti Flicker" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="UNIMPLEMENTED EInk Service Settings">
         <ListPreference
             app:key="single_press_eink_action"
             app:title="Single Press Action"
@@ -106,7 +123,7 @@
     </PreferenceCategory>
 
 
-    <PreferenceCategory app:title="Refresh Mode Settings">
+    <PreferenceCategory app:title="UNIMPLEMENTED Refresh Mode Settings">
         <SwitchPreferenceCompat
             app:key="allow_custom_broadcast"
             app:title="Allow Control via Broadcasts" />
@@ -133,7 +150,7 @@
             app:defaultValue="2" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="Color Scheme">
+    <PreferenceCategory app:title="UNIMPLEMENTED Color Scheme">
         <ListPreference
             app:key="color_scheme_type"
             app:title="Color Scheme Type"
