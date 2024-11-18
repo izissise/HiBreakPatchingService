@@ -23,7 +23,7 @@ static readonly string kTAG = "hibreakEinkService";
 // #define LOGI(...) ((void)printf(__VA_ARGS__))
 // #define LOGE(...) ((void)printf(__VA_ARGS__))
 
-#define SOCKET_NAME "hibreak_eink_socket"
+#define SOCKET_NAME "0hibreak_eink_socket"
 #define BUFFER_SIZE 512
 
 int valid_number(readonly string s) {
@@ -154,7 +154,7 @@ int serve() {
     memset(&server_addr, 0, sizeof(server_addr));
     strncpy(server_addr.sun_path, SOCKET_NAME, sizeof(server_addr.sun_path) - 1);
     server_addr.sun_family = AF_UNIX;
-    // server_addr.sun_path[0] = 0;
+    server_addr.sun_path[0] = 0;
 
     int ret = EXIT_SUCCESS;
     with(serverfd, close, socket(AF_UNIX, SOCK_STREAM, 0)) {
