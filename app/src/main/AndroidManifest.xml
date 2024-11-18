@@ -24,7 +24,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Ha9_comp_service">
+        android:theme="@style/Theme.Hibreak_comp_service">
         <activity
             android:name=".SettingsActivity"
             android:exported="true"
@@ -36,9 +36,9 @@
         </activity>
 
         <service
-            android:name=".A9AccessibilityService"
+            android:name=".HibreakAccessibilityService"
             android:exported="true"
-            android:label="A9 Accessibility Service"
+            android:label="HiBreak Accessibility Service"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

@@ -13,6 +13,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ha9_comp_service"
+rootProject.name = "hibreak_comp_service"
 include(":app")
  

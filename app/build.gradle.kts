@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.lmqr.ha9_comp_service"
+    namespace = "net.izissise.hibreak_comp_service"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.lmqr.ha9_comp_service"
+        applicationId = "net.izissise.hibreak_comp_service"
         minSdk = 27
         targetSdk = 27
         versionCode = 40

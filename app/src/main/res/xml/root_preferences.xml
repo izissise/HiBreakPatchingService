@@ -141,7 +141,7 @@
             app:entryValues="@array/color_type_values"
             app:defaultValue="5" />
 
-        <com.lmqr.ha9_comp_service.ColorProgressPreference
+        <net.izissise.hibreak_comp_service.ColorProgressPreference
             app:key="color_scheme_color"
             app:title="Accent Color"
             app:updatesContinuously="false"
