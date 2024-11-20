@@ -21,6 +21,7 @@ class BacklightSliderPreference(context: Context, attrs: AttributeSet) : SeekBar
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
         val seekBar = holder.findViewById(androidx.preference.R.id.seekbar) as? SeekBar
+        seekBar?.setMax(255)
         val valueTextView = holder.findViewById(androidx.preference.R.id.seekbar_value) as? TextView
         seekBar?.run {
             setOnSeekBarChangeListener(object : OnSeekBarChangeListener {
